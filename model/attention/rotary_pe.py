@@ -55,12 +55,24 @@ class RotaryEmbedding(nn.Module):
         self.register_buffer("sin_cached", emb.sin(), persistent=False)
 
     def forward(
-        self, x: torch.Tensor, seq_len: int, offset: int = 0
+        self, x: torch.Tensor, seq_len: int, offset: int = 0,
+        position_ids: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         if x.size(-1) != self.dim:
             raise ValueError(f"expected input head dimension {self.dim}, got {x.size(-1)}")
         if seq_len < 0 or offset < 0 or offset + seq_len > self.max_seq_len:
             raise ValueError("requested rotary position range exceeds max_seq_len")
+        if position_ids is not None:
+            if position_ids.shape != (x.size(0), seq_len):
+                raise ValueError("position_ids must have shape (batch_size, seq_len)")
+            if position_ids.dtype not in (torch.int32, torch.int64):
+                raise ValueError("position_ids must contain integer indices")
+            if torch.any(position_ids < 0) or torch.any(position_ids >= self.max_seq_len):
+                raise ValueError("position_ids exceed the rotary position range")
+            indices = position_ids.to(self.cos_cached.device)
+            cos = self.cos_cached[indices].to(dtype=x.dtype, device=x.device)
+            sin = self.sin_cached[indices].to(dtype=x.dtype, device=x.device)
+            return cos.unsqueeze(1), sin.unsqueeze(1)
         cos = self.cos_cached[offset : offset + seq_len, :].to(dtype=x.dtype, device=x.device)
         sin = self.sin_cached[offset : offset + seq_len, :].to(dtype=x.dtype, device=x.device)
         # Reshape to (1, 1, seq_len, dim) for head broadcasting

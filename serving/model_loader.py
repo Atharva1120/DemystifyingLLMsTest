@@ -56,6 +56,11 @@ class ModelLoader:
 
         logger.info(f"Loading weights from {self.weights_path}...")
         state_dict = load_checkpoint(self.weights_path, map_location=map_location)
-        model.load_state_dict(state_dict, strict=strict)
+        incompatible = model.load_state_dict(state_dict, strict=strict)
+        if incompatible.missing_keys or incompatible.unexpected_keys:
+            logger.warning(
+                "Checkpoint key mismatch: missing=%s, unexpected=%s",
+                incompatible.missing_keys, incompatible.unexpected_keys,
+            )
         logger.info("Model weights loaded successfully.")
         return model

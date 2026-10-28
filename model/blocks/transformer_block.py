@@ -49,7 +49,9 @@ class TransformerBlock(nn.Module):
         self,
         x: torch.Tensor,
         mask: Optional[torch.Tensor] = None,
-        kv_cache: Optional[Any] = None
+        kv_cache: Optional[Any] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        use_causal_mask: bool = True,
     ) -> torch.Tensor:
         """
         Forward pass for transformer block.
@@ -64,7 +66,8 @@ class TransformerBlock(nn.Module):
         """
         h = self.resid1(
             x,
-            self.attn(self.ln1(x), mask=mask, kv_cache=kv_cache, layer_idx=self.layer_idx),
+            self.attn(self.ln1(x), mask=mask, kv_cache=kv_cache, layer_idx=self.layer_idx,
+                      position_ids=position_ids, use_causal_mask=use_causal_mask),
         )
         out = self.resid2(h, self.ffn(self.ln2(h)))
         return out

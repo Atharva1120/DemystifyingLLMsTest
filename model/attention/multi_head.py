@@ -70,7 +70,8 @@ class MultiHeadAttention(nn.Module):
         mask: Optional[torch.Tensor] = None,
         kv_cache: Optional[Any] = None,
         layer_idx: Optional[int] = None,
-        use_causal_mask: bool = True
+        use_causal_mask: bool = True,
+        position_ids: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """
         Forward pass for multi-head attention.
@@ -102,7 +103,7 @@ class MultiHeadAttention(nn.Module):
         if kv_cache is not None and layer_idx is not None:
             past_len = kv_cache.get_seq_length(layer_idx)
         if self.rotary_emb is not None:
-            cos, sin = self.rotary_emb(q, seq_len, offset=past_len)
+            cos, sin = self.rotary_emb(q, seq_len, offset=past_len, position_ids=position_ids)
             q, k = apply_rotary_pos_emb(q, k, cos, sin)
         if kv_cache is not None and layer_idx is not None:
             k, v = kv_cache.update(layer_idx, k, v)

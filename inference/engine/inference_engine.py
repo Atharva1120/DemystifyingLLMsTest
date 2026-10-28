@@ -59,7 +59,7 @@ class FullTransformerModel(nn.Module):
             mask = kwargs.get("mask")
             kwargs["mask"] = padding_mask if mask is None else mask + padding_mask
         h = self.embeddings(input_ids, offset=offset, position_ids=position_ids)
-        h = self.blocks(h, **kwargs)
+        h = self.blocks(h, position_ids=position_ids, **kwargs)
         logits = self.lm_head(h)
         return logits
 
@@ -132,6 +132,16 @@ class InferenceEngine:
             raise ValueError("prompt_tokens must contain at least one token")
 
         stop_token_ids = self.inference_config.stop_token_ids
+        if self.inference_config.beam_width > 1:
+            from inference.generation.beam_search import BeamSearch
+            search = BeamSearch(
+                beam_width=self.inference_config.beam_width,
+                max_length=max_tokens,
+                stop_token_ids=stop_token_ids if self.inference_config.early_stopping else [],
+                context_length=self.model_config.max_seq_len,
+            )
+            input_ids = torch.tensor([tokens], dtype=torch.long, device=self.device)
+            return search.search(self.model, input_ids)[0].tolist()
         use_cache = (
             self.inference_config.use_kv_cache
             and isinstance(self.model, FullTransformerModel)

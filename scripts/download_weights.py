@@ -43,7 +43,7 @@ def initialize_seeded_weights(
 
     torch.save(state_dict, output_path)
     file_size_mb = os.path.getsize(output_path) / (1024 * 1024)
-    print(f"✅ Successfully saved weights checkpoint to '{output_path}' ({file_size_mb:.2f} MB)")
+    print(f"Successfully saved weights checkpoint to '{output_path}' ({file_size_mb:.2f} MB)")
 
 
 def main():

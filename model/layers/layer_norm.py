@@ -31,16 +31,17 @@ class LayerNorm(nn.Module):
         cfg = _resolve_config(config)
 
         if normalized_shape is not None:
-            self.d_model = normalized_shape if isinstance(normalized_shape, int) else normalized_shape[-1]
+            self.normalized_shape = (normalized_shape,) if isinstance(normalized_shape, int) else tuple(normalized_shape)
         else:
-            self.d_model = getattr(cfg, "d_model", 768)
+            self.normalized_shape = (getattr(cfg, "d_model", 768),)
+        self.d_model = self.normalized_shape[-1] if self.normalized_shape else 0
 
         self.eps = eps if eps is not None else getattr(cfg, "layer_norm_eps", 1e-5)
-        if self.d_model <= 0 or self.eps <= 0:
+        if not self.normalized_shape or any(dim <= 0 for dim in self.normalized_shape) or self.eps <= 0:
             raise ValueError("normalized dimension and epsilon must be positive")
 
-        self.weight = nn.Parameter(torch.ones(self.d_model))
-        self.bias = nn.Parameter(torch.zeros(self.d_model))
+        self.weight = nn.Parameter(torch.ones(self.normalized_shape))
+        self.bias = nn.Parameter(torch.zeros(self.normalized_shape))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -52,8 +53,11 @@ class LayerNorm(nn.Module):
         Returns:
             Normalized tensor of same shape.
         """
-        mean = x.mean(dim=-1, keepdim=True)
-        var = x.var(dim=-1, keepdim=True, unbiased=False)
+        if tuple(x.shape[-len(self.normalized_shape):]) != self.normalized_shape:
+            raise ValueError("input trailing dimensions must match normalized_shape")
+        dims = tuple(range(-len(self.normalized_shape), 0))
+        mean = x.mean(dim=dims, keepdim=True)
+        var = x.var(dim=dims, keepdim=True, unbiased=False)
 
         x_norm = (x - mean) / torch.sqrt(var + self.eps)
         return self.weight * x_norm + self.bias
