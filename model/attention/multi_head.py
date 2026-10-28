@@ -108,13 +108,14 @@ class MultiHeadAttention(nn.Module):
             k, v = kv_cache.update(layer_idx, k, v)
 
         # 4. Prepare causal mask if needed
-        if mask is None and use_causal_mask:
-            mask = create_causal_mask(
+        if use_causal_mask:
+            causal_mask = create_causal_mask(
                 seq_len=seq_len,
                 past_len=past_len,
                 device=x.device,
                 dtype=x.dtype,
             )
+            mask = causal_mask if mask is None else mask + causal_mask
 
         # 5. Scaled dot-product attention
         attn_out, _ = scaled_dot_product_attention(

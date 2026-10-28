@@ -52,3 +52,15 @@ class Vocabulary:
 
     def __contains__(self, token: str) -> bool:
         return token in self._token_to_id
+
+
+# The convenience encode/decode functions share one vocabulary. Explicitly
+# constructed Vocabulary and BPETokenizer instances remain independent.
+_default_vocab = None
+
+
+def get_default_vocab() -> Vocabulary:
+    global _default_vocab
+    if _default_vocab is None:
+        _default_vocab = Vocabulary()
+    return _default_vocab

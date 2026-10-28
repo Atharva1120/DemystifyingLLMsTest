@@ -30,13 +30,35 @@ class FullTransformerModel(nn.Module):
         self.embeddings = EmbeddingLayer(config=config)
         self.blocks = BlockStack(config=config)
         self.lm_head = LMHead(config=config)
+        self.apply(self._initialize_weights)
         if config.tie_weights:
             self.lm_head.tie_weights(self.embeddings.token_embedding.embedding.weight)
+
+    def _initialize_weights(self, module: nn.Module) -> None:
+        if isinstance(module, (nn.Linear, nn.Embedding)):
+            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            if isinstance(module, nn.Linear) and module.bias is not None:
+                nn.init.zeros_(module.bias)
 
     def forward(self, input_ids: torch.Tensor, **kwargs) -> torch.Tensor:
         kv_cache = kwargs.get("kv_cache")
         offset = kv_cache.get_seq_length(0) if kv_cache is not None else 0
-        h = self.embeddings(input_ids, offset=offset)
+        attention_mask = kwargs.pop("attention_mask", None)
+        position_ids = kwargs.pop("position_ids", None)
+        if attention_mask is not None:
+            if attention_mask.shape != (input_ids.size(0), offset + input_ids.size(1)):
+                raise ValueError("attention_mask must cover cached and current tokens")
+            if position_ids is None:
+                position_ids = (attention_mask.long().cumsum(-1) - 1).clamp_min(0)
+                position_ids = position_ids[:, -input_ids.size(1):]
+            padding_mask = torch.zeros(
+                attention_mask.shape, device=input_ids.device,
+                dtype=self.embeddings.token_embedding.embedding.weight.dtype,
+            ).masked_fill(attention_mask.to(input_ids.device).eq(0), float("-inf"))
+            padding_mask = padding_mask[:, None, None, :]
+            mask = kwargs.get("mask")
+            kwargs["mask"] = padding_mask if mask is None else mask + padding_mask
+        h = self.embeddings(input_ids, offset=offset, position_ids=position_ids)
         h = self.blocks(h, **kwargs)
         logits = self.lm_head(h)
         return logits
@@ -109,7 +131,7 @@ class InferenceEngine:
         if not tokens:
             raise ValueError("prompt_tokens must contain at least one token")
 
-        stop_token_ids = self.inference_config.stop_token_ids or [EOS_TOKEN_ID]
+        stop_token_ids = self.inference_config.stop_token_ids
         use_cache = (
             self.inference_config.use_kv_cache
             and isinstance(self.model, FullTransformerModel)
@@ -143,7 +165,7 @@ class InferenceEngine:
                 next_token = int(sampled.item())
                 tokens.append(next_token)
 
-                if next_token in stop_token_ids:
+                if self.inference_config.early_stopping and next_token in stop_token_ids:
                     break
 
         return tokens
