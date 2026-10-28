@@ -22,7 +22,9 @@ def initialize_seeded_weights(output_path: str = DEFAULT_WEIGHTS_PATH, seed: int
     """
     Generate deterministic starter weights for the transformer model.
     """
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    output_dir = os.path.dirname(output_path)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
     torch.manual_seed(seed)
 
     config = ModelConfig()
@@ -32,27 +34,39 @@ def initialize_seeded_weights(output_path: str = DEFAULT_WEIGHTS_PATH, seed: int
     state_dict = {}
 
     # Embeddings
-    state_dict["embeddings.token_embedding.weight"] = torch.randn(config.vocab_size, config.d_model) * 0.02
-    state_dict["embeddings.position_embedding.weight"] = torch.randn(config.max_seq_len, config.d_model) * 0.02
+    token_embedding = torch.randn(config.vocab_size, config.d_model) * config.initializer_range
+    state_dict["embeddings.token_embedding.embedding.weight"] = token_embedding
+    state_dict["embeddings.position_embedding.wpe.weight"] = torch.randn(
+        config.max_seq_len, config.d_model
+    ) * config.initializer_range
 
     # Blocks
     for layer_idx in range(config.n_layers):
-        prefix = f"blocks.{layer_idx}"
+        prefix = f"blocks.blocks.{layer_idx}"
         # Attention
-        state_dict[f"{prefix}.attn.q_proj.weight"] = torch.randn(config.d_model, config.d_model) * 0.02
-        state_dict[f"{prefix}.attn.k_proj.weight"] = torch.randn(config.d_model, config.d_model) * 0.02
-        state_dict[f"{prefix}.attn.v_proj.weight"] = torch.randn(config.d_model, config.d_model) * 0.02
-        state_dict[f"{prefix}.attn.out_proj.weight"] = torch.randn(config.d_model, config.d_model) * 0.02
+        state_dict[f"{prefix}.attn.q_proj.weight"] = torch.randn(config.d_model, config.d_model) * config.initializer_range
+        state_dict[f"{prefix}.attn.q_proj.bias"] = torch.zeros(config.d_model)
+        state_dict[f"{prefix}.attn.k_proj.weight"] = torch.randn(config.d_model, config.d_model) * config.initializer_range
+        state_dict[f"{prefix}.attn.k_proj.bias"] = torch.zeros(config.d_model)
+        state_dict[f"{prefix}.attn.v_proj.weight"] = torch.randn(config.d_model, config.d_model) * config.initializer_range
+        state_dict[f"{prefix}.attn.v_proj.bias"] = torch.zeros(config.d_model)
+        state_dict[f"{prefix}.attn.out_proj.weight"] = torch.randn(config.d_model, config.d_model) * config.initializer_range
+        state_dict[f"{prefix}.attn.out_proj.bias"] = torch.zeros(config.d_model)
         # FFN
-        state_dict[f"{prefix}.ffn.linear1.weight"] = torch.randn(config.d_ffn, config.d_model) * 0.02
-        state_dict[f"{prefix}.ffn.linear2.weight"] = torch.randn(config.d_model, config.d_ffn) * 0.02
+        state_dict[f"{prefix}.ffn.linear1.weight"] = torch.randn(config.d_ffn, config.d_model) * config.initializer_range
+        state_dict[f"{prefix}.ffn.linear1.bias"] = torch.zeros(config.d_ffn)
+        state_dict[f"{prefix}.ffn.linear2.weight"] = torch.randn(config.d_model, config.d_ffn) * config.initializer_range
+        state_dict[f"{prefix}.ffn.linear2.bias"] = torch.zeros(config.d_model)
         # LayerNorms
         state_dict[f"{prefix}.ln1.weight"] = torch.ones(config.d_model)
+        state_dict[f"{prefix}.ln1.bias"] = torch.zeros(config.d_model)
         state_dict[f"{prefix}.ln2.weight"] = torch.ones(config.d_model)
+        state_dict[f"{prefix}.ln2.bias"] = torch.zeros(config.d_model)
 
     # LM Head
-    state_dict["lm_head.weight"] = torch.randn(config.vocab_size, config.d_model) * 0.02
-    state_dict["final_ln.weight"] = torch.ones(config.d_model)
+    state_dict["lm_head.proj.weight"] = token_embedding
+    state_dict["blocks.final_ln.weight"] = torch.ones(config.d_model)
+    state_dict["blocks.final_ln.bias"] = torch.zeros(config.d_model)
 
     torch.save(state_dict, output_path)
     file_size_mb = os.path.getsize(output_path) / (1024 * 1024)
